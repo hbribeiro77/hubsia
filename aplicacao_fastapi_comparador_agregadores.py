@@ -114,9 +114,10 @@ def criar_app(*, secret: str, db_path: str, https: bool = False) -> FastAPI:
 
     @app.exception_handler(404)
     async def erro_nao_encontrado(request: Request, exc: Exception):
-        return HTMLResponse(
-            "<!DOCTYPE html><html lang='pt-BR'><body>"
-            "<h1>Página não encontrada.</h1></body></html>",
+        return templates.TemplateResponse(
+            request,
+            "pagina_nao_encontrada.html",
+            {"flash": None},
             status_code=404,
         )
 
@@ -259,19 +260,30 @@ def criar_app(*, secret: str, db_path: str, https: bool = False) -> FastAPI:
     def _linhas_da_comparacao(comparacao_id: int) -> list[dict]:
         linhas = []
         for servico in banco.listar_servicos(comparacao_id):
-            contas = calcular_creditos_e_geracoes(
-                servico.custo_mensal_usd,
-                servico.creditos_mes,
-                servico.custo_referencia_creditos,
-            )
-            linhas.append(
-                {
-                    "servico": servico,
-                    "custo_mensal": formatar_numero_pt_br(servico.custo_mensal_usd),
-                    "creditos_mes": formatar_numero_pt_br(servico.creditos_mes),
-                    "custo_referencia": formatar_numero_pt_br(
-                        servico.custo_referencia_creditos
-                    ),
+            def formatar_valor_armazenado(valor):
+                try:
+                    return formatar_numero_pt_br(valor)
+                except (ArithmeticError, ValueError):
+                    return "Valor inválido"
+
+            linha = {
+                "servico": servico,
+                "custo_mensal": formatar_valor_armazenado(
+                    servico.custo_mensal_usd
+                ),
+                "creditos_mes": formatar_valor_armazenado(servico.creditos_mes),
+                "custo_referencia": formatar_valor_armazenado(
+                    servico.custo_referencia_creditos
+                ),
+            }
+            try:
+                contas = calcular_creditos_e_geracoes(
+                    servico.custo_mensal_usd,
+                    servico.creditos_mes,
+                    servico.custo_referencia_creditos,
+                )
+                linha.update(
+                    {
                     "creditos_por_dolar": formatar_numero_pt_br(
                         contas.creditos_por_dolar
                     ),
@@ -279,8 +291,17 @@ def criar_app(*, secret: str, db_path: str, https: bool = False) -> FastAPI:
                         contas.geracoes_por_dolar
                     ),
                     "geracoes_mensais": formatar_numero_pt_br(contas.geracoes_mensais),
-                }
-            )
+                    }
+                )
+            except (EntradaInvalidaCalculo, ArithmeticError, ValueError):
+                linha.update(
+                    {
+                        "creditos_por_dolar": "Erro de cálculo",
+                        "geracoes_por_dolar": "Erro de cálculo",
+                        "geracoes_mensais": "Erro de cálculo",
+                    }
+                )
+            linhas.append(linha)
         return linhas
 
     def _ler_servico_form(form_nome, custo, creditos, referencia):

@@ -69,3 +69,22 @@ def test_parsear_rejeita_vazio_e_nao_positivo():
         parsear_decimal_entrada("-2")
     with pytest.raises(EntradaInvalidaCalculo):
         parsear_decimal_entrada("abc")
+
+
+@pytest.mark.parametrize("texto", ["1e30", "1e400", "Infinity"])
+def test_parsear_rejeita_valores_extremos_ou_infinitos(texto):
+    with pytest.raises(EntradaInvalidaCalculo):
+        parsear_decimal_entrada(texto)
+
+
+@pytest.mark.parametrize(
+    "valor_extremo",
+    [Decimal("1e30"), Decimal("1e400"), Decimal("Infinity")],
+)
+def test_calcular_rejeita_valores_extremos_ou_infinitos(valor_extremo):
+    with pytest.raises(EntradaInvalidaCalculo):
+        calcular_creditos_e_geracoes(
+            valor_extremo,
+            Decimal("1200"),
+            Decimal("10"),
+        )

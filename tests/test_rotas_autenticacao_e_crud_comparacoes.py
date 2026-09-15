@@ -1,3 +1,7 @@
+import re
+from decimal import Decimal
+
+from banco_sqlite_comparacoes_e_servicos import Servico
 from tests.conftest import SECRET_TESTE
 
 
@@ -60,6 +64,14 @@ def test_rota_desconhecida_autenticada_retorna_404_html(client_autenticado):
     resposta = client_autenticado.get("/rota-inexistente")
     assert resposta.status_code == 404
     assert resposta.headers["content-type"].startswith("text/html")
+    assert 'href="/"' in resposta.text
+    assert "Voltar às comparações" in resposta.text
+
+
+def test_rota_desconhecida_sem_sessao_redireciona_login(client):
+    resposta = client.get("/rota-inexistente", follow_redirects=False)
+    assert resposta.status_code == 302
+    assert resposta.headers["location"] == "/login"
 
 
 def test_criar_comparacao_e_abrir_tabela_vazia(client_autenticado):
@@ -86,7 +98,7 @@ def test_criar_comparacao_nome_vazio_nao_grava(client_autenticado):
     )
     assert resposta.status_code == 422
     lista = client_autenticado.get("/")
-    assert "Wan 3" not in lista.text or "Nenhuma comparação ainda." in lista.text
+    assert "Nenhuma comparação ainda." in lista.text
 
 
 def test_comparacao_inexistente_404(client_autenticado):
@@ -218,7 +230,62 @@ def test_servico_custo_zero_nao_grava(client_autenticado):
     )
     assert resposta.status_code == 422
     pagina = client_autenticado.get(f"/comparacoes/{comparacao_id}")
-    assert "X" not in pagina.text or "Nenhum serviço ainda." in pagina.text
+    assert "Nenhum serviço ainda." in pagina.text
+
+
+def test_servico_com_custo_extremo_retorna_422_e_nao_grava(client_autenticado):
+    client_autenticado.post(
+        "/comparacoes",
+        data={"nome": "A", "referencia": "ref"},
+        follow_redirects=True,
+    )
+    comparacao_id = _id_primeira_comparacao(client_autenticado)
+    resposta = client_autenticado.post(
+        f"/comparacoes/{comparacao_id}/servicos",
+        data={
+            "nome": "Extremo",
+            "custo_mensal_usd": "1e400",
+            "creditos_mes": "1200",
+            "custo_referencia_creditos": "10",
+        },
+        follow_redirects=False,
+    )
+    assert resposta.status_code == 422
+    pagina = client_autenticado.get(f"/comparacoes/{comparacao_id}")
+    assert "Nenhum serviço ainda." in pagina.text
+
+
+def test_tabela_com_servico_infinito_ainda_retorna_200(
+    client_autenticado, monkeypatch
+):
+    client_autenticado.post(
+        "/comparacoes",
+        data={"nome": "A", "referencia": "ref"},
+        follow_redirects=True,
+    )
+    comparacao_id = _id_primeira_comparacao(client_autenticado)
+
+    def listar_servicos_com_infinito(_banco, id_recebido):
+        assert id_recebido == comparacao_id
+        return [
+            Servico(
+                id=1,
+                comparacao_id=comparacao_id,
+                nome="Linha corrompida",
+                custo_mensal_usd=Decimal("Infinity"),
+                creditos_mes=Decimal("1200"),
+                custo_referencia_creditos=Decimal("10"),
+            )
+        ]
+
+    monkeypatch.setattr(
+        "banco_sqlite_comparacoes_e_servicos.BancoComparacoes.listar_servicos",
+        listar_servicos_com_infinito,
+    )
+    resposta = client_autenticado.get(f"/comparacoes/{comparacao_id}")
+    assert resposta.status_code == 200
+    assert "Linha corrompida" in resposta.text
+    assert "Erro de cálculo" in resposta.text
 
 
 def test_duas_tabelas_mesmo_servico_referencias_diferentes(client_autenticado):
@@ -259,8 +326,10 @@ def test_duas_tabelas_mesmo_servico_referencias_diferentes(client_autenticado):
     )
     pagina_480 = client_autenticado.get(f"/comparacoes/{id_480}").text
     pagina_720 = client_autenticado.get(f"/comparacoes/{id_720}").text
-    assert "120" in pagina_480
-    assert "30" in pagina_720
+    celulas_480 = re.findall(r"<td[^>]*>\s*([^<]*?)\s*</td>", pagina_480)
+    celulas_720 = re.findall(r"<td[^>]*>\s*([^<]*?)\s*</td>", pagina_720)
+    assert celulas_480[6] == "120"
+    assert celulas_720[6] == "30"
     assert "Comparando: Wan 3 480p" in pagina_480
     assert "Comparando: Wan 3 720p" in pagina_720
 
