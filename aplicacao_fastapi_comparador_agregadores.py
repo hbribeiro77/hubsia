@@ -105,6 +105,22 @@ def criar_app(*, secret: str, db_path: str, https: bool = False) -> FastAPI:
     static_dir.mkdir(exist_ok=True)
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
+    @app.exception_handler(404)
+    async def erro_nao_encontrado(request: Request, exc: Exception):
+        return HTMLResponse(
+            "<!DOCTYPE html><html lang='pt-BR'><body>"
+            "<h1>Página não encontrada.</h1></body></html>",
+            status_code=404,
+        )
+
+    @app.exception_handler(405)
+    async def erro_metodo_nao_permitido(request: Request, exc: Exception):
+        return HTMLResponse(
+            "<!DOCTYPE html><html lang='pt-BR'><body>"
+            "<h1>Método não permitido.</h1></body></html>",
+            status_code=405,
+        )
+
     class ExigirSessao(BaseHTTPMiddleware):
         async def dispatch(self, request: Request, call_next):
             if request.url.path.startswith("/static"):
@@ -127,9 +143,9 @@ def criar_app(*, secret: str, db_path: str, https: bool = False) -> FastAPI:
 
     @app.post("/login", response_class=HTMLResponse)
     async def post_login(
-        request: Request, secret_form: str = Form(..., alias="secret")
+        request: Request, secret_form: str = Form("", alias="secret")
     ):
-        if hmac.compare_digest(secret_form, secret):
+        if hmac.compare_digest(secret_form.encode("utf-8"), secret.encode("utf-8")):
             resposta = RedirectResponse(url="/", status_code=302)
             definir_cookie_sessao(resposta, secret, https)
             return resposta

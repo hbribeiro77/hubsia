@@ -13,6 +13,19 @@ def test_login_secret_invalido_permanece_na_tela(client):
     assert "Secret inválido." in resposta.text
 
 
+def test_login_sem_secret_permanece_na_tela_html(client):
+    resposta = client.post("/login", data={}, follow_redirects=False)
+    assert resposta.status_code == 200
+    assert resposta.headers["content-type"].startswith("text/html")
+    assert "Secret inválido." in resposta.text
+
+
+def test_login_secret_nao_ascii_nao_500(client):
+    resposta = client.post("/login", data={"secret": "inválido"})
+    assert resposta.status_code == 200
+    assert "Secret inválido." in resposta.text
+
+
 def test_login_secret_valido_seta_cookie_e_vai_para_lista(client):
     resposta = client.post(
         "/login", data={"secret": SECRET_TESTE}, follow_redirects=False
@@ -40,3 +53,10 @@ def test_logout_apaga_sessao(client_autenticado):
 def test_get_logout_nao_permitido(client_autenticado):
     resposta = client_autenticado.get("/logout")
     assert resposta.status_code == 405
+    assert resposta.headers["content-type"].startswith("text/html")
+
+
+def test_rota_desconhecida_autenticada_retorna_404_html(client_autenticado):
+    resposta = client_autenticado.get("/rota-inexistente")
+    assert resposta.status_code == 404
+    assert resposta.headers["content-type"].startswith("text/html")
