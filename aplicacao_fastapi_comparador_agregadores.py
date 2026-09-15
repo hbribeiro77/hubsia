@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 
 from fastapi import FastAPI, Form, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -121,6 +122,17 @@ def criar_app(*, secret: str, db_path: str, https: bool = False) -> FastAPI:
             status_code=405,
         )
 
+    @app.exception_handler(RequestValidationError)
+    async def erro_validacao_requisicao(
+        request: Request, exc: RequestValidationError
+    ):
+        return templates.TemplateResponse(
+            request,
+            "pagina_nao_encontrada.html",
+            {"flash": None},
+            status_code=404,
+        )
+
     class ExigirSessao(BaseHTTPMiddleware):
         async def dispatch(self, request: Request, call_next):
             if request.url.path == "/static" or request.url.path.startswith("/static/"):
@@ -192,24 +204,19 @@ def criar_app(*, secret: str, db_path: str, https: bool = False) -> FastAPI:
             request, "pagina_nao_encontrada.html", {"flash": None}, status_code=404
         )
 
-    def _consumir_flash(request: Request) -> tuple[str | None, dict[str, str]]:
-        """Devolve (mensagem, headers extras com Set-Cookie de delete)."""
+    def _consumir_flash(request: Request) -> str | None:
         token = request.cookies.get(COOKIE_FLASH)
         if not token:
-            return None, {}
-        dummy = RedirectResponse(url="/", status_code=302)
-        dummy.delete_cookie(
-            COOKIE_FLASH, path="/", secure=https, httponly=True, samesite="lax"
-        )
+            return None
         try:
             dados = _assinador(secret, SALT_FLASH).loads(token, max_age=120)
             mensagem = dados.get("m") if isinstance(dados.get("m"), str) else None
         except (BadSignature, SignatureExpired, TypeError):
             mensagem = None
-        return mensagem, dict(dummy.headers)
+        return mensagem
 
     def _resposta_tabela(request: Request, comparacao, **extra):
-        flash, headers_flash = _consumir_flash(request)
+        flash = _consumir_flash(request)
         status = extra.pop("status_code", 200)
         contexto = {
             "comparacao": comparacao,
@@ -219,13 +226,21 @@ def criar_app(*, secret: str, db_path: str, https: bool = False) -> FastAPI:
             "servico_edicao": extra.get("servico_edicao"),
             "flash": flash,
         }
-        return templates.TemplateResponse(
+        resposta = templates.TemplateResponse(
             request,
             "pagina_tabela_comparacao_servicos.html",
             contexto,
             status_code=status,
-            headers=headers_flash,
         )
+        if COOKIE_FLASH in request.cookies:
+            resposta.delete_cookie(
+                COOKIE_FLASH,
+                path="/",
+                secure=https,
+                httponly=True,
+                samesite="lax",
+            )
+        return resposta
 
     @app.get("/comparacoes/nova", response_class=HTMLResponse)
     async def get_nova(request: Request):
