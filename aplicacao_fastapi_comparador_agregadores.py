@@ -126,11 +126,19 @@ def criar_app(*, secret: str, db_path: str, https: bool = False) -> FastAPI:
     async def erro_validacao_requisicao(
         request: Request, exc: RequestValidationError
     ):
-        return templates.TemplateResponse(
-            request,
-            "pagina_nao_encontrada.html",
-            {"flash": None},
-            status_code=404,
+        if any(
+            err.get("loc") and err["loc"][0] == "path" for err in exc.errors()
+        ):
+            return templates.TemplateResponse(
+                request,
+                "pagina_nao_encontrada.html",
+                {"flash": None},
+                status_code=404,
+            )
+        return HTMLResponse(
+            "<!DOCTYPE html><html lang='pt-BR'><body>"
+            "<h1>Dados inválidos.</h1></body></html>",
+            status_code=422,
         )
 
     class ExigirSessao(BaseHTTPMiddleware):
