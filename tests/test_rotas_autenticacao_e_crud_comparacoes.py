@@ -95,6 +95,15 @@ def test_comparacao_inexistente_404(client_autenticado):
     assert "Comparações" in resposta.text or "/" in resposta.text
 
 
+def test_excluir_comparacao_inexistente_retorna_404_html(client_autenticado):
+    resposta = client_autenticado.post(
+        "/comparacoes/999/excluir", follow_redirects=False
+    )
+    assert resposta.status_code == 404
+    assert resposta.headers["content-type"].startswith("text/html")
+    assert "Não encontrado" in resposta.text
+
+
 def test_excluir_comparacao(client_autenticado):
     client_autenticado.post(
         "/comparacoes",
