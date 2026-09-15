@@ -181,6 +181,124 @@ def criar_app(*, secret: str, db_path: str, https: bool = False) -> FastAPI:
             )
         return html
 
+    def _validar_texto(valor: str, minimo: int, maximo: int) -> str | None:
+        texto = (valor or "").strip()
+        if not (minimo <= len(texto) <= maximo):
+            return None
+        return texto
+
+    def _pagina_404(request: Request):
+        return templates.TemplateResponse(
+            request, "pagina_nao_encontrada.html", {"flash": None}, status_code=404
+        )
+
+    def _consumir_flash(request: Request) -> tuple[str | None, dict[str, str]]:
+        """Devolve (mensagem, headers extras com Set-Cookie de delete)."""
+        token = request.cookies.get(COOKIE_FLASH)
+        if not token:
+            return None, {}
+        dummy = RedirectResponse(url="/", status_code=302)
+        dummy.delete_cookie(
+            COOKIE_FLASH, path="/", secure=https, httponly=True, samesite="lax"
+        )
+        try:
+            dados = _assinador(secret, SALT_FLASH).loads(token, max_age=120)
+            mensagem = dados.get("m") if isinstance(dados.get("m"), str) else None
+        except (BadSignature, SignatureExpired, TypeError):
+            mensagem = None
+        return mensagem, dict(dummy.headers)
+
+    def _resposta_tabela(request: Request, comparacao, **extra):
+        flash, headers_flash = _consumir_flash(request)
+        status = extra.pop("status_code", 200)
+        contexto = {
+            "comparacao": comparacao,
+            "linhas": extra.get("linhas", []),
+            "erro_meta": extra.get("erro_meta"),
+            "erro_servico": extra.get("erro_servico"),
+            "servico_edicao": extra.get("servico_edicao"),
+            "flash": flash,
+        }
+        return templates.TemplateResponse(
+            request,
+            "pagina_tabela_comparacao_servicos.html",
+            contexto,
+            status_code=status,
+            headers=headers_flash,
+        )
+
+    @app.get("/comparacoes/nova", response_class=HTMLResponse)
+    async def get_nova(request: Request):
+        return templates.TemplateResponse(
+            request,
+            "pagina_formulario_nova_comparacao.html",
+            {"erro": None, "nome": "", "referencia": "", "flash": None},
+        )
+
+    @app.post("/comparacoes", response_class=HTMLResponse)
+    async def post_nova(
+        request: Request, nome: str = Form(""), referencia: str = Form("")
+    ):
+        nome_ok = _validar_texto(nome, 1, 80)
+        ref_ok = _validar_texto(referencia, 1, 200)
+        if nome_ok is None or ref_ok is None:
+            return templates.TemplateResponse(
+                request,
+                "pagina_formulario_nova_comparacao.html",
+                {
+                    "erro": "Nome (1 a 80) e referência (1 a 200) são obrigatórios.",
+                    "nome": nome,
+                    "referencia": referencia,
+                    "flash": None,
+                },
+                status_code=422,
+            )
+        criada = banco.criar_comparacao(nome_ok, ref_ok)
+        return RedirectResponse(url=f"/comparacoes/{criada.id}", status_code=302)
+
+    @app.get("/comparacoes/{comparacao_id}", response_class=HTMLResponse)
+    async def get_tabela(request: Request, comparacao_id: int):
+        comparacao = banco.obter_comparacao(comparacao_id)
+        if comparacao is None:
+            return _pagina_404(request)
+        return _resposta_tabela(request, comparacao, linhas=[])
+
+    @app.post("/comparacoes/{comparacao_id}", response_class=HTMLResponse)
+    async def post_meta(
+        request: Request,
+        comparacao_id: int,
+        nome: str = Form(""),
+        referencia: str = Form(""),
+    ):
+        comparacao = banco.obter_comparacao(comparacao_id)
+        if comparacao is None:
+            return _pagina_404(request)
+        nome_ok = _validar_texto(nome, 1, 80)
+        ref_ok = _validar_texto(referencia, 1, 200)
+        if nome_ok is None or ref_ok is None:
+            return _resposta_tabela(
+                request,
+                comparacao,
+                erro_meta="Nome (1 a 80) e referência (1 a 200) são obrigatórios.",
+                status_code=422,
+            )
+        referencia_mudou = ref_ok != comparacao.referencia
+        banco.atualizar_comparacao(comparacao_id, nome_ok, ref_ok)
+        resposta = RedirectResponse(url=f"/comparacoes/{comparacao_id}", status_code=302)
+        if referencia_mudou:
+            definir_cookie_flash(
+                resposta,
+                secret,
+                "A referência mudou. Atualize o custo em créditos de cada serviço para a nova geração.",
+                https,
+            )
+        return resposta
+
+    @app.post("/comparacoes/{comparacao_id}/excluir")
+    async def post_excluir_comparacao(comparacao_id: int):
+        banco.excluir_comparacao(comparacao_id)
+        return RedirectResponse(url="/", status_code=302)
+
     return app
 
 

@@ -1,0 +1,77 @@
+{% extends "pagina_base_hubsia.html" %}
+{% block titulo %}{{ comparacao.nome }} — Hubsia{% endblock %}
+{% block conteudo %}
+<h1>{{ comparacao.nome }}</h1>
+<p>Comparando: {{ comparacao.referencia }}</p>
+{% if erro_meta %}<p class="erro">{{ erro_meta }}</p>{% endif %}
+<form method="post" action="/comparacoes/{{ comparacao.id }}">
+  <label>Nome
+    <input type="text" name="nome" required maxlength="80" value="{{ comparacao.nome }}">
+  </label>
+  <label>Referência
+    <input type="text" name="referencia" required maxlength="200" value="{{ comparacao.referencia }}">
+  </label>
+  <button type="submit">Salvar referência</button>
+</form>
+
+<h2>{% if servico_edicao %}Editar serviço{% else %}Novo serviço{% endif %}</h2>
+{% if erro_servico %}<p class="erro">{{ erro_servico }}</p>{% endif %}
+<form method="post" action="{% if servico_edicao %}/servicos/{{ servico_edicao.id }}{% else %}/comparacoes/{{ comparacao.id }}/servicos{% endif %}">
+  <label>Serviço
+    <input type="text" name="nome" required maxlength="80" value="{{ servico_edicao.nome if servico_edicao else '' }}">
+  </label>
+  <label>Custo mensal (USD)
+    <input type="number" name="custo_mensal_usd" step="any" required value="{{ servico_edicao.custo_mensal_usd if servico_edicao else '' }}">
+  </label>
+  <label>Total de créditos no mês
+    <input type="number" name="creditos_mes" step="any" required value="{{ servico_edicao.creditos_mes if servico_edicao else '' }}">
+  </label>
+  <label>Custo usado como referência
+    <input type="number" name="custo_referencia_creditos" step="any" required value="{{ servico_edicao.custo_referencia_creditos if servico_edicao else '' }}">
+  </label>
+  <button type="submit">{% if servico_edicao %}Salvar serviço{% else %}Adicionar{% endif %}</button>
+  {% if servico_edicao %}
+  <a href="/comparacoes/{{ comparacao.id }}">Cancelar</a>
+  {% endif %}
+</form>
+
+<div class="tabela-scroll">
+<table>
+  <thead>
+    <tr>
+      <th>Serviço</th>
+      <th>Custo mensal (USD)</th>
+      <th>Total de créditos no mês</th>
+      <th>Créditos por dólar</th>
+      <th>Custo usado como referência</th>
+      <th>Gerações por dólar</th>
+      <th>Gerações mensais no plano</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% if not linhas %}
+    <tr><td colspan="8">Nenhum serviço ainda.</td></tr>
+    {% else %}
+    {% for linha in linhas %}
+    <tr>
+      <td>{{ linha.servico.nome }}</td>
+      <td>{{ linha.custo_mensal }}</td>
+      <td>{{ linha.creditos_mes }}</td>
+      <td>{{ linha.creditos_por_dolar }}</td>
+      <td>{{ linha.custo_referencia }}</td>
+      <td>{{ linha.geracoes_por_dolar }}</td>
+      <td>{{ linha.geracoes_mensais }}</td>
+      <td>
+        <a href="/comparacoes/{{ comparacao.id }}?editar_servico={{ linha.servico.id }}">Editar</a>
+        <form method="post" action="/servicos/{{ linha.servico.id }}/excluir" onsubmit="return confirm('Excluir este serviço?');">
+          <button type="submit">Excluir</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+    {% endif %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

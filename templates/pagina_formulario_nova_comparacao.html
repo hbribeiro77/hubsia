@@ -1,0 +1,15 @@
+{% extends "pagina_base_hubsia.html" %}
+{% block titulo %}Nova comparação — Hubsia{% endblock %}
+{% block conteudo %}
+<h1>Nova comparação</h1>
+{% if erro %}<p class="erro">{{ erro }}</p>{% endif %}
+<form method="post" action="/comparacoes">
+  <label>Nome
+    <input type="text" name="nome" required maxlength="80" value="{{ nome or '' }}">
+  </label>
+  <label>Referência
+    <input type="text" name="referencia" required maxlength="200" value="{{ referencia or '' }}" placeholder="Wan 3, 10s, 480p">
+  </label>
+  <button type="submit">Criar</button>
+</form>
+{% endblock %}
