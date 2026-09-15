@@ -14,9 +14,14 @@
       <a class="nome" href="/comparacoes/{{ item.id }}">{{ item.nome }}</a>
       <div class="referencia">{{ item.referencia }}</div>
     </div>
-    <form method="post" action="/comparacoes/{{ item.id }}/excluir" onsubmit="return confirm('Excluir esta comparação e todos os serviços?');">
-      <button class="botao-perigo" type="submit">Excluir</button>
-    </form>
+    <div class="acoes-lista">
+      <form method="post" action="/comparacoes/{{ item.id }}/duplicar">
+        <button class="botao-fantasma" type="submit">Duplicar</button>
+      </form>
+      <form method="post" action="/comparacoes/{{ item.id }}/excluir" onsubmit="return confirm('Excluir esta comparação e todos os serviços?');">
+        <button class="botao-perigo" type="submit">Excluir</button>
+      </form>
+    </div>
   </li>
   {% endfor %}
 </ul>

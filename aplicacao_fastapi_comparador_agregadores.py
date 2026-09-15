@@ -550,6 +550,13 @@ def criar_app(*, secret: str, db_path: str, https: bool = False) -> FastAPI:
         banco.excluir_servico(servico_id)
         return RedirectResponse(url=f"/comparacoes/{comparacao_id}", status_code=302)
 
+    @app.post("/comparacoes/{comparacao_id}/duplicar")
+    async def post_duplicar_comparacao(request: Request, comparacao_id: int):
+        copia = banco.duplicar_comparacao(comparacao_id)
+        if copia is None:
+            return _pagina_404(request)
+        return RedirectResponse(url=f"/comparacoes/{copia.id}", status_code=302)
+
     @app.post("/comparacoes/{comparacao_id}/excluir")
     async def post_excluir_comparacao(request: Request, comparacao_id: int):
         if not banco.excluir_comparacao(comparacao_id):

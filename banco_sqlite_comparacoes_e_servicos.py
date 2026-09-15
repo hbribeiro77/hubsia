@@ -11,6 +11,17 @@ def _agora_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+SUFIXO_NOME_COPIA = " (cópia)"
+TAMANHO_MAXIMO_NOME = 80
+
+
+def nome_da_comparacao_copiada(nome: str) -> str:
+    if len(nome) + len(SUFIXO_NOME_COPIA) <= TAMANHO_MAXIMO_NOME:
+        return nome + SUFIXO_NOME_COPIA
+    corte = TAMANHO_MAXIMO_NOME - len(SUFIXO_NOME_COPIA)
+    return nome[:corte] + SUFIXO_NOME_COPIA
+
+
 @dataclass
 class Comparacao:
     id: int
@@ -102,6 +113,44 @@ class BancoComparacoes:
                 "DELETE FROM comparacoes WHERE id = ?", (comparacao_id,)
             )
             return cursor.rowcount > 0
+
+    def duplicar_comparacao(self, comparacao_id: int) -> Comparacao | None:
+        with self._conectar() as conexao:
+            original = self._comparacao_por_id(conexao, comparacao_id)
+            if original is None:
+                return None
+            agora = _agora_iso()
+            cursor = conexao.execute(
+                "INSERT INTO comparacoes (nome, referencia, criado_em, atualizado_em) VALUES (?, ?, ?, ?)",
+                (
+                    nome_da_comparacao_copiada(original.nome),
+                    original.referencia,
+                    agora,
+                    agora,
+                ),
+            )
+            novo_id = cursor.lastrowid
+            servicos = conexao.execute(
+                "SELECT * FROM servicos WHERE comparacao_id = ? ORDER BY id ASC",
+                (comparacao_id,),
+            ).fetchall()
+            for linha in servicos:
+                conexao.execute(
+                    """
+                    INSERT INTO servicos (
+                        comparacao_id, nome, custo_mensal_usd, creditos_mes,
+                        custo_referencia_creditos
+                    ) VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (
+                        novo_id,
+                        linha["nome"],
+                        linha["custo_mensal_usd"],
+                        linha["creditos_mes"],
+                        linha["custo_referencia_creditos"],
+                    ),
+                )
+            return self._comparacao_por_id(conexao, novo_id)
 
     def criar_servico(
         self,

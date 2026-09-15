@@ -300,6 +300,17 @@ dialog h2 {
   font-weight: 500;
 }
 
+.acoes-lista {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.acoes-lista form {
+  margin: 0;
+}
+
 .tabela-scroll {
   overflow-x: auto;
   background: var(--superficie);

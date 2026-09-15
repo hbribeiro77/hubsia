@@ -38,3 +38,37 @@ def test_obter_inexistente_retorna_none(tmp_path):
     assert banco.obter_comparacao(999) is None
     assert banco.obter_servico(999) is None
     assert banco.excluir_comparacao(999) is False
+
+
+def test_duplicar_comparacao_copia_servicos_e_nao_altera_original(tmp_path):
+    banco = BancoComparacoes(str(tmp_path / "hubsia.db"))
+    banco.inicializar()
+    original = banco.criar_comparacao("Wan 3 480p", "Wan 3, 10s, 480p")
+    banco.criar_servico(
+        original.id, "Higgsfield", Decimal("30"), Decimal("1200"), Decimal("10")
+    )
+    banco.criar_servico(
+        original.id, "Kling", Decimal("10"), Decimal("600"), Decimal("8")
+    )
+    copia = banco.duplicar_comparacao(original.id)
+    assert copia is not None
+    assert copia.id != original.id
+    assert copia.nome == "Wan 3 480p (cópia)"
+    assert copia.referencia == "Wan 3, 10s, 480p"
+    originais = banco.listar_servicos(original.id)
+    copiados = banco.listar_servicos(copia.id)
+    assert len(originais) == 2
+    assert len(copiados) == 2
+    assert [s.id for s in originais] != [s.id for s in copiados]
+    assert copiados[0].nome == "Higgsfield"
+    assert copiados[0].custo_mensal_usd == Decimal("30")
+    assert copiados[0].creditos_mes == Decimal("1200")
+    assert copiados[0].custo_referencia_creditos == Decimal("10")
+    assert copiados[1].nome == "Kling"
+    assert banco.obter_comparacao(original.id).nome == "Wan 3 480p"
+
+
+def test_duplicar_comparacao_inexistente_retorna_none(tmp_path):
+    banco = BancoComparacoes(str(tmp_path / "hubsia.db"))
+    banco.inicializar()
+    assert banco.duplicar_comparacao(999) is None

@@ -177,6 +177,64 @@ def test_excluir_comparacao(client_autenticado):
     assert "Apagar" not in lista.text
 
 
+def test_lista_vazia_nao_mostra_duplicar(client_autenticado):
+    lista = client_autenticado.get("/")
+    assert "Nenhuma comparação ainda." in lista.text
+    assert "Duplicar" not in lista.text
+
+
+def test_duplicar_comparacao_redireciona_para_copia_com_servicos(
+    client_autenticado,
+):
+    client_autenticado.post(
+        "/comparacoes",
+        data={"nome": "Wan 3 480p", "referencia": "Wan 3, 10s, 480p"},
+        follow_redirects=True,
+    )
+    comparacao_id = _id_primeira_comparacao(client_autenticado)
+    client_autenticado.post(
+        f"/comparacoes/{comparacao_id}/servicos",
+        data={
+            "nome": "Higgsfield",
+            "custo_mensal_usd": "30",
+            "creditos_mes": "1200",
+            "custo_referencia_creditos": "10",
+        },
+    )
+    lista = client_autenticado.get("/")
+    assert "Duplicar" in lista.text
+    duplicar = lista.text.find("Duplicar")
+    excluir = lista.text.find("Excluir")
+    assert duplicar != -1 and excluir != -1
+    assert duplicar < excluir
+    resposta = client_autenticado.post(
+        f"/comparacoes/{comparacao_id}/duplicar", follow_redirects=False
+    )
+    assert resposta.status_code == 302
+    local = resposta.headers["location"]
+    assert local.startswith("/comparacoes/")
+    assert local != f"/comparacoes/{comparacao_id}"
+    copia = client_autenticado.get(local)
+    assert copia.status_code == 200
+    assert "Wan 3 480p (cópia)" in copia.text
+    assert "Comparando: Wan 3, 10s, 480p" in copia.text
+    assert "Higgsfield" in copia.text
+    original = client_autenticado.get(f"/comparacoes/{comparacao_id}")
+    assert "Wan 3 480p (cópia)" not in original.text
+    assert ">Higgsfield<" in original.text
+    lista = client_autenticado.get("/")
+    assert "Wan 3 480p (cópia)" in lista.text
+    assert lista.text.count("Duplicar") >= 2
+
+
+def test_duplicar_comparacao_inexistente_retorna_404(client_autenticado):
+    resposta = client_autenticado.post(
+        "/comparacoes/999/duplicar", follow_redirects=False
+    )
+    assert resposta.status_code == 404
+    assert "Não encontrado" in resposta.text
+
+
 def test_aviso_referencia_so_quando_referencia_muda(client_autenticado):
     client_autenticado.post(
         "/comparacoes",
