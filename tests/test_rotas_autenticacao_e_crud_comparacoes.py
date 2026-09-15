@@ -162,3 +162,135 @@ def _id_primeira_comparacao(client) -> int:
     achado = re.search(r"/comparacoes/(\d+)", lista.text)
     assert achado is not None
     return int(achado.group(1))
+
+
+def test_servico_higgsfield_mostra_contas_na_tabela(client_autenticado):
+    client_autenticado.post(
+        "/comparacoes",
+        data={"nome": "Wan 3 480p", "referencia": "Wan 3, 10s, 480p"},
+        follow_redirects=True,
+    )
+    comparacao_id = _id_primeira_comparacao(client_autenticado)
+    criada = client_autenticado.post(
+        f"/comparacoes/{comparacao_id}/servicos",
+        data={
+            "nome": "Higgsfield",
+            "custo_mensal_usd": "30",
+            "creditos_mes": "1200",
+            "custo_referencia_creditos": "10",
+        },
+        follow_redirects=False,
+    )
+    assert criada.status_code == 302
+    pagina = client_autenticado.get(f"/comparacoes/{comparacao_id}")
+    assert "Higgsfield" in pagina.text
+    assert ">40<" in pagina.text or ">40</td>" in pagina.text
+    assert ">120<" in pagina.text or ">120</td>" in pagina.text
+    assert ">4<" in pagina.text or ">4</td>" in pagina.text
+
+
+def test_servico_custo_zero_nao_grava(client_autenticado):
+    client_autenticado.post(
+        "/comparacoes",
+        data={"nome": "A", "referencia": "ref"},
+        follow_redirects=True,
+    )
+    comparacao_id = _id_primeira_comparacao(client_autenticado)
+    resposta = client_autenticado.post(
+        f"/comparacoes/{comparacao_id}/servicos",
+        data={
+            "nome": "X",
+            "custo_mensal_usd": "0",
+            "creditos_mes": "100",
+            "custo_referencia_creditos": "10",
+        },
+        follow_redirects=False,
+    )
+    assert resposta.status_code == 422
+    pagina = client_autenticado.get(f"/comparacoes/{comparacao_id}")
+    assert "X" not in pagina.text or "Nenhum serviço ainda." in pagina.text
+
+
+def test_duas_tabelas_mesmo_servico_referencias_diferentes(client_autenticado):
+    client_autenticado.post(
+        "/comparacoes",
+        data={"nome": "480p", "referencia": "Wan 3 480p"},
+        follow_redirects=True,
+    )
+    client_autenticado.post(
+        "/comparacoes",
+        data={"nome": "720p", "referencia": "Wan 3 720p"},
+        follow_redirects=True,
+    )
+    lista = client_autenticado.get("/")
+    import re
+    ids = list(
+        dict.fromkeys(int(x) for x in re.findall(r"/comparacoes/(\d+)", lista.text))
+    )
+    assert len(ids) >= 2
+    id_720, id_480 = ids[0], ids[1]
+    client_autenticado.post(
+        f"/comparacoes/{id_480}/servicos",
+        data={
+            "nome": "Higgsfield",
+            "custo_mensal_usd": "30",
+            "creditos_mes": "1200",
+            "custo_referencia_creditos": "10",
+        },
+    )
+    client_autenticado.post(
+        f"/comparacoes/{id_720}/servicos",
+        data={
+            "nome": "Higgsfield",
+            "custo_mensal_usd": "30",
+            "creditos_mes": "1200",
+            "custo_referencia_creditos": "40",
+        },
+    )
+    pagina_480 = client_autenticado.get(f"/comparacoes/{id_480}").text
+    pagina_720 = client_autenticado.get(f"/comparacoes/{id_720}").text
+    assert "120" in pagina_480
+    assert "30" in pagina_720
+    assert "Comparando: Wan 3 480p" in pagina_480
+    assert "Comparando: Wan 3 720p" in pagina_720
+
+
+def test_editar_e_excluir_servico(client_autenticado):
+    client_autenticado.post(
+        "/comparacoes",
+        data={"nome": "A", "referencia": "ref"},
+        follow_redirects=True,
+    )
+    comparacao_id = _id_primeira_comparacao(client_autenticado)
+    client_autenticado.post(
+        f"/comparacoes/{comparacao_id}/servicos",
+        data={
+            "nome": "Higgsfield",
+            "custo_mensal_usd": "30",
+            "creditos_mes": "1200",
+            "custo_referencia_creditos": "10",
+        },
+        follow_redirects=True,
+    )
+    pagina = client_autenticado.get(f"/comparacoes/{comparacao_id}")
+    import re
+    servico_id = int(re.search(r"editar_servico=(\d+)", pagina.text).group(1))
+    edicao = client_autenticado.get(
+        f"/comparacoes/{comparacao_id}?editar_servico={servico_id}"
+    )
+    assert 'value="Higgsfield"' in edicao.text
+    client_autenticado.post(
+        f"/servicos/{servico_id}",
+        data={
+            "nome": "Higgsfield Pro",
+            "custo_mensal_usd": "30",
+            "creditos_mes": "1200",
+            "custo_referencia_creditos": "10",
+        },
+        follow_redirects=True,
+    )
+    assert "Higgsfield Pro" in client_autenticado.get(f"/comparacoes/{comparacao_id}").text
+    client_autenticado.post(f"/servicos/{servico_id}/excluir", follow_redirects=True)
+    final = client_autenticado.get(f"/comparacoes/{comparacao_id}")
+    assert "Higgsfield Pro" not in final.text
+    assert "Nenhum serviço ainda." in final.text

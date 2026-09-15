@@ -13,6 +13,12 @@ from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from banco_sqlite_comparacoes_e_servicos import BancoComparacoes
+from calculos_creditos_e_geracoes_por_dolar import (
+    EntradaInvalidaCalculo,
+    calcular_creditos_e_geracoes,
+    formatar_numero_pt_br,
+    parsear_decimal_entrada,
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 COOKIE_SESSAO = "hubsia_session"
@@ -250,6 +256,44 @@ def criar_app(*, secret: str, db_path: str, https: bool = False) -> FastAPI:
             )
         return resposta
 
+    def _linhas_da_comparacao(comparacao_id: int) -> list[dict]:
+        linhas = []
+        for servico in banco.listar_servicos(comparacao_id):
+            contas = calcular_creditos_e_geracoes(
+                servico.custo_mensal_usd,
+                servico.creditos_mes,
+                servico.custo_referencia_creditos,
+            )
+            linhas.append(
+                {
+                    "servico": servico,
+                    "custo_mensal": formatar_numero_pt_br(servico.custo_mensal_usd),
+                    "creditos_mes": formatar_numero_pt_br(servico.creditos_mes),
+                    "custo_referencia": formatar_numero_pt_br(
+                        servico.custo_referencia_creditos
+                    ),
+                    "creditos_por_dolar": formatar_numero_pt_br(
+                        contas.creditos_por_dolar
+                    ),
+                    "geracoes_por_dolar": formatar_numero_pt_br(
+                        contas.geracoes_por_dolar
+                    ),
+                    "geracoes_mensais": formatar_numero_pt_br(contas.geracoes_mensais),
+                }
+            )
+        return linhas
+
+    def _ler_servico_form(form_nome, custo, creditos, referencia):
+        nome_ok = _validar_texto(form_nome, 1, 80)
+        if nome_ok is None:
+            raise EntradaInvalidaCalculo("nome inválido")
+        return (
+            nome_ok,
+            parsear_decimal_entrada(custo),
+            parsear_decimal_entrada(creditos),
+            parsear_decimal_entrada(referencia),
+        )
+
     @app.get("/comparacoes/nova", response_class=HTMLResponse)
     async def get_nova(request: Request):
         return templates.TemplateResponse(
@@ -279,12 +323,57 @@ def criar_app(*, secret: str, db_path: str, https: bool = False) -> FastAPI:
         criada = banco.criar_comparacao(nome_ok, ref_ok)
         return RedirectResponse(url=f"/comparacoes/{criada.id}", status_code=302)
 
-    @app.get("/comparacoes/{comparacao_id}", response_class=HTMLResponse)
-    async def get_tabela(request: Request, comparacao_id: int):
+    @app.post("/comparacoes/{comparacao_id}/servicos", response_class=HTMLResponse)
+    async def post_servico(
+        request: Request,
+        comparacao_id: int,
+        nome: str = Form(""),
+        custo_mensal_usd: str = Form(""),
+        creditos_mes: str = Form(""),
+        custo_referencia_creditos: str = Form(""),
+    ):
         comparacao = banco.obter_comparacao(comparacao_id)
         if comparacao is None:
             return _pagina_404(request)
-        return _resposta_tabela(request, comparacao, linhas=[])
+        try:
+            nome_ok, custo, creditos, ref_cred = _ler_servico_form(
+                nome, custo_mensal_usd, creditos_mes, custo_referencia_creditos
+            )
+            calcular_creditos_e_geracoes(custo, creditos, ref_cred)
+        except EntradaInvalidaCalculo:
+            return _resposta_tabela(
+                request,
+                comparacao,
+                linhas=_linhas_da_comparacao(comparacao.id),
+                erro_servico="Informe serviço, custo mensal, créditos e referência maiores que zero.",
+                status_code=422,
+            )
+        banco.criar_servico(comparacao_id, nome_ok, custo, creditos, ref_cred)
+        return RedirectResponse(url=f"/comparacoes/{comparacao_id}", status_code=302)
+
+    @app.get("/comparacoes/{comparacao_id}", response_class=HTMLResponse)
+    async def get_tabela(
+        request: Request,
+        comparacao_id: int,
+        editar_servico: int | None = None,
+    ):
+        comparacao = banco.obter_comparacao(comparacao_id)
+        if comparacao is None:
+            return _pagina_404(request)
+        servico_edicao = None
+        if editar_servico is not None:
+            servico_edicao = banco.obter_servico(editar_servico)
+            if (
+                servico_edicao is None
+                or servico_edicao.comparacao_id != comparacao.id
+            ):
+                return _pagina_404(request)
+        return _resposta_tabela(
+            request,
+            comparacao,
+            linhas=_linhas_da_comparacao(comparacao.id),
+            servico_edicao=servico_edicao,
+        )
 
     @app.post("/comparacoes/{comparacao_id}", response_class=HTMLResponse)
     async def post_meta(
@@ -302,6 +391,7 @@ def criar_app(*, secret: str, db_path: str, https: bool = False) -> FastAPI:
             return _resposta_tabela(
                 request,
                 comparacao,
+                linhas=_linhas_da_comparacao(comparacao.id),
                 erro_meta="Nome (1 a 80) e referência (1 a 200) são obrigatórios.",
                 status_code=422,
             )
@@ -316,6 +406,47 @@ def criar_app(*, secret: str, db_path: str, https: bool = False) -> FastAPI:
                 https,
             )
         return resposta
+
+    @app.post("/servicos/{servico_id}", response_class=HTMLResponse)
+    async def post_atualizar_servico(
+        request: Request,
+        servico_id: int,
+        nome: str = Form(""),
+        custo_mensal_usd: str = Form(""),
+        creditos_mes: str = Form(""),
+        custo_referencia_creditos: str = Form(""),
+    ):
+        servico = banco.obter_servico(servico_id)
+        if servico is None:
+            return _pagina_404(request)
+        comparacao = banco.obter_comparacao(servico.comparacao_id)
+        try:
+            nome_ok, custo, creditos, ref_cred = _ler_servico_form(
+                nome, custo_mensal_usd, creditos_mes, custo_referencia_creditos
+            )
+            calcular_creditos_e_geracoes(custo, creditos, ref_cred)
+        except EntradaInvalidaCalculo:
+            return _resposta_tabela(
+                request,
+                comparacao,
+                linhas=_linhas_da_comparacao(comparacao.id),
+                erro_servico="Informe serviço, custo mensal, créditos e referência maiores que zero.",
+                servico_edicao=servico,
+                status_code=422,
+            )
+        banco.atualizar_servico(servico_id, nome_ok, custo, creditos, ref_cred)
+        return RedirectResponse(
+            url=f"/comparacoes/{servico.comparacao_id}", status_code=302
+        )
+
+    @app.post("/servicos/{servico_id}/excluir")
+    async def post_excluir_servico(servico_id: int):
+        servico = banco.obter_servico(servico_id)
+        if servico is None:
+            return RedirectResponse(url="/", status_code=302)
+        comparacao_id = servico.comparacao_id
+        banco.excluir_servico(servico_id)
+        return RedirectResponse(url=f"/comparacoes/{comparacao_id}", status_code=302)
 
     @app.post("/comparacoes/{comparacao_id}/excluir")
     async def post_excluir_comparacao(request: Request, comparacao_id: int):
