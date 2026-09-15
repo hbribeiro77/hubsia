@@ -2,19 +2,39 @@
 
 Site pessoal: várias tabelas, cada uma com uma geração de referência (ex.: Wan 3, 10s, 480p). Você informa preço do plano, créditos do mês e créditos da geração; o site calcula créditos/US$, gerações/US$ e gerações no mês.
 
-## Coolify
+## EasyPanel / Coolify
 
-No serviço, escolha **Dockerfile**. O Coolify faz o proxy HTTPS; o container escuta `0.0.0.0:8000`.
+Padrão igual ao youtubeplaylist / Tina: Dockerfile na raiz, `PORT` lido do ambiente, health em `/health`.
 
-Variáveis:
+No painel do app, configure:
 
-| Variável | Valor |
-|---|---|
-| `HUBSIA_SECRET` | senha de acesso (obrigatória) |
-| `HUBSIA_HTTPS` | `true` |
-| `HUBSIA_DB_PATH` | `/data/hubsia.db` |
+| Campo | Valor |
+|-------|-------|
+| **Fonte** | GitHub → `hbribeiro77/hubsia` |
+| **Build** | Dockerfile na raiz |
+| **Porta interna** | `3000` (ou deixe o EasyPanel injetar `PORT` — o app lê essa variável) |
+| **Health check** | HTTP `GET /health` |
+| **Domínio** | o subdomínio gerado (ex.: `apps-hubsia....easypanel.host`) |
 
-Persistent Storage: monte um volume em `/data` (senão o SQLite some a cada deploy). Porta do container: `8000`.
+Variáveis de ambiente:
+
+```env
+HUBSIA_SECRET=troque-isto
+HUBSIA_HTTPS=true
+HUBSIA_DB_PATH=/data/hubsia.db
+```
+
+`HUBSIA_SECRET` é obrigatória: sem ela o container **nem sobe**.
+
+#### Persistir o banco entre deploys
+
+1. Abra o app no EasyPanel → aba **Storage** (ou **Mounts**)
+2. Adicione um **Volume Mount**:
+   - **Name:** `app-data`
+   - **Mount path:** `/data`
+3. Salve e faça **redeploy** (rebuild, não só restart)
+
+Se aparecer **"Service is not reachable"**, confira nos logs se o uvicorn subiu e se a **porta do painel** bate com `PORT` (padrão `3000`, igual Tina / Planning / Smarttask). Falta de `HUBSIA_SECRET` também derruba o container na largada.
 
 ## Rodar local
 

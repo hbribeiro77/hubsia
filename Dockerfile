@@ -1,26 +1,35 @@
+# Mesmo padrão do youtubeplaylist (FastAPI + SQLite no EasyPanel):
+# PORT injetável pelo painel, health em /health, volume para o banco.
 FROM python:3.12-slim
-
-WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    HOST=0.0.0.0 \
+    PORT=3000 \
     HUBSIA_DB_PATH=/data/hubsia.db \
     HUBSIA_HTTPS=true
 
+WORKDIR /app
+
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
-    && useradd --create-home --uid 1000 hubsia \
-    && mkdir -p /data \
-    && chown hubsia:hubsia /data
+    && mkdir -p /data
 
-COPY --chown=hubsia:hubsia aplicacao_fastapi_comparador_agregadores.py \
+COPY aplicacao_fastapi_comparador_agregadores.py \
     banco_sqlite_comparacoes_e_servicos.py \
     calculos_creditos_e_geracoes_por_dolar.py \
+    entrypoint_container_hubsia.sh \
     ./
-COPY --chown=hubsia:hubsia templates ./templates
-COPY --chown=hubsia:hubsia static ./static
+COPY templates ./templates
+COPY static ./static
 
-USER hubsia
-EXPOSE 8000
+RUN chmod +x /app/entrypoint_container_hubsia.sh
 
-CMD ["sh", "-c", "uvicorn aplicacao_fastapi_comparador_agregadores:app --host 0.0.0.0 --port ${PORT:-8000}"]
+VOLUME ["/data"]
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=5 \
+    CMD python -c "import os,urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\",\"3000\")}/health')" || exit 1
+
+ENTRYPOINT ["/app/entrypoint_container_hubsia.sh"]

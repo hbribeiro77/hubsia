@@ -5,6 +5,12 @@ from banco_sqlite_comparacoes_e_servicos import Servico
 from tests.conftest import SECRET_TESTE
 
 
+def test_health_sem_sessao_retorna_ok(client):
+    resposta = client.get("/health")
+    assert resposta.status_code == 200
+    assert resposta.text == "ok"
+
+
 def test_css_estatico_e_servido_sem_login(client):
     resposta = client.get("/static/estilos_comparador_agregadores.css")
     assert resposta.status_code == 200

@@ -152,13 +152,17 @@ def criar_app(*, secret: str, db_path: str, https: bool = False) -> FastAPI:
         async def dispatch(self, request: Request, call_next):
             if request.url.path == "/static" or request.url.path.startswith("/static/"):
                 return await call_next(request)
-            if request.url.path == "/login":
+            if request.url.path in ("/login", "/health"):
                 return await call_next(request)
             if sessao_valida(secret, request.cookies.get(COOKIE_SESSAO)):
                 return await call_next(request)
             return RedirectResponse(url="/login", status_code=302)
 
     app.add_middleware(ExigirSessao)
+
+    @app.get("/health")
+    async def get_health():
+        return Response(content="ok", media_type="text/plain")
 
     @app.get("/login", response_class=HTMLResponse)
     async def get_login(request: Request):
