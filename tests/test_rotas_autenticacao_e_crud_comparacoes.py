@@ -21,6 +21,7 @@ def test_css_estatico_e_servido_sem_login(client):
     assert ".botao-icone" in resposta.text
     assert "#f3eee6" in resposta.text
     assert "#d7efe8" in resposta.text
+    assert "th a.ordenar" in resposta.text
 
 
 def test_raiz_sem_sessao_redireciona_login(client):
@@ -403,3 +404,60 @@ def test_editar_e_excluir_servico(client_autenticado):
     final = client_autenticado.get(f"/comparacoes/{comparacao_id}")
     assert "Higgsfield Pro" not in final.text
     assert "Nenhum serviço ainda." in final.text
+
+
+def _criar_comparacao_com_dois_servicos(client) -> int:
+    client.post(
+        "/comparacoes",
+        data={"nome": "Ordem", "referencia": "Wan 3"},
+        follow_redirects=True,
+    )
+    comparacao_id = _id_primeira_comparacao(client)
+    client.post(
+        f"/comparacoes/{comparacao_id}/servicos",
+        data={
+            "nome": "Caro",
+            "custo_mensal_usd": "30",
+            "creditos_mes": "1200",
+            "custo_referencia_creditos": "10",
+        },
+    )
+    client.post(
+        f"/comparacoes/{comparacao_id}/servicos",
+        data={
+            "nome": "Barato",
+            "custo_mensal_usd": "10",
+            "creditos_mes": "1200",
+            "custo_referencia_creditos": "10",
+        },
+    )
+    return comparacao_id
+
+
+def test_tabela_ordena_por_padrao_geracoes_por_dolar_desc(client_autenticado):
+    comparacao_id = _criar_comparacao_com_dois_servicos(client_autenticado)
+    pagina = client_autenticado.get(f"/comparacoes/{comparacao_id}").text
+    assert pagina.find(">Barato<") < pagina.find(">Caro<")
+    assert 'aria-sort="descending"' in pagina
+    assert "ordenar=geracoes_por_dolar" in pagina
+
+
+def test_tabela_ordena_por_servico_quando_query_pede(client_autenticado):
+    comparacao_id = _criar_comparacao_com_dois_servicos(client_autenticado)
+    pagina = client_autenticado.get(
+        f"/comparacoes/{comparacao_id}?ordenar=servico&dir=asc"
+    ).text
+    assert pagina.find(">Barato<") < pagina.find(">Caro<")
+    pagina_desc = client_autenticado.get(
+        f"/comparacoes/{comparacao_id}?ordenar=servico&dir=desc"
+    ).text
+    assert pagina_desc.find(">Caro<") < pagina_desc.find(">Barato<")
+
+
+def test_tabela_query_de_ordenacao_invalida_cai_no_padrao(client_autenticado):
+    comparacao_id = _criar_comparacao_com_dois_servicos(client_autenticado)
+    pagina = client_autenticado.get(
+        f"/comparacoes/{comparacao_id}?ordenar=nao_existe&dir=xyz"
+    ).text
+    assert pagina.find(">Barato<") < pagina.find(">Caro<")
+    assert 'aria-sort="descending"' in pagina

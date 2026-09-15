@@ -26,6 +26,58 @@ COOKIE_FLASH = "hubsia_flash"
 SESSAO_MAX_AGE = 30 * 24 * 60 * 60
 SALT_SESSAO = "hubsia-sessao"
 SALT_FLASH = "hubsia-flash"
+COLUNAS_ORDENAVEIS = frozenset(
+    {
+        "servico",
+        "custo_mensal",
+        "creditos_mes",
+        "creditos_por_dolar",
+        "custo_referencia",
+        "geracoes_por_dolar",
+        "geracoes_mensais",
+    }
+)
+COLUNA_ORDEM_PADRAO = "geracoes_por_dolar"
+DIRECAO_ORDEM_PADRAO = "desc"
+
+
+def normalizar_ordenacao_tabela(
+    ordenar: str | None, direcao: str | None
+) -> tuple[str, str]:
+    coluna = ordenar if ordenar in COLUNAS_ORDENAVEIS else COLUNA_ORDEM_PADRAO
+    if direcao in ("asc", "desc"):
+        return coluna, direcao
+    if coluna == "servico":
+        return coluna, "asc"
+    return coluna, DIRECAO_ORDEM_PADRAO
+
+
+def ordenar_linhas_da_tabela(
+    linhas: list[dict], coluna: str, direcao: str
+) -> list[dict]:
+    com_valor = []
+    sem_valor = []
+    for linha in linhas:
+        valor = linha.get("ordem", {}).get(coluna)
+        if valor is None:
+            sem_valor.append(linha)
+        else:
+            com_valor.append(linha)
+    com_valor.sort(
+        key=lambda linha: linha["ordem"][coluna], reverse=direcao == "desc"
+    )
+    return com_valor + sem_valor
+
+
+def links_cabecalhos_ordenacao(ordenar: str, direcao: str) -> dict[str, str]:
+    links = {}
+    for coluna in COLUNAS_ORDENAVEIS:
+        if ordenar == coluna:
+            proxima = "asc" if direcao == "desc" else "desc"
+        else:
+            proxima = "asc" if coluna == "servico" else "desc"
+        links[coluna] = f"?ordenar={coluna}&dir={proxima}"
+    return links
 
 
 def _assinador(secret: str, salt: str) -> URLSafeTimedSerializer:
@@ -237,13 +289,22 @@ def criar_app(*, secret: str, db_path: str, https: bool = False) -> FastAPI:
     def _resposta_tabela(request: Request, comparacao, **extra):
         flash = _consumir_flash(request)
         status = extra.pop("status_code", 200)
+        ordenar, direcao = normalizar_ordenacao_tabela(
+            request.query_params.get("ordenar"),
+            request.query_params.get("dir"),
+        )
         contexto = {
             "comparacao": comparacao,
-            "linhas": extra.get("linhas", []),
+            "linhas": ordenar_linhas_da_tabela(
+                extra.get("linhas", []), ordenar, direcao
+            ),
             "erro_meta": extra.get("erro_meta"),
             "erro_servico": extra.get("erro_servico"),
             "servico_edicao": extra.get("servico_edicao"),
             "flash": flash,
+            "ordenar": ordenar,
+            "dir": direcao,
+            "links_ordenacao": links_cabecalhos_ordenacao(ordenar, direcao),
         }
         resposta = templates.TemplateResponse(
             request,
@@ -279,6 +340,15 @@ def criar_app(*, secret: str, db_path: str, https: bool = False) -> FastAPI:
                 "custo_referencia": formatar_valor_armazenado(
                     servico.custo_referencia_creditos
                 ),
+                "ordem": {
+                    "servico": servico.nome.casefold(),
+                    "custo_mensal": servico.custo_mensal_usd,
+                    "creditos_mes": servico.creditos_mes,
+                    "custo_referencia": servico.custo_referencia_creditos,
+                    "creditos_por_dolar": None,
+                    "geracoes_por_dolar": None,
+                    "geracoes_mensais": None,
+                },
             }
             try:
                 contas = calcular_creditos_e_geracoes(
@@ -295,6 +365,13 @@ def criar_app(*, secret: str, db_path: str, https: bool = False) -> FastAPI:
                         contas.geracoes_por_dolar
                     ),
                     "geracoes_mensais": formatar_numero_pt_br(contas.geracoes_mensais),
+                    }
+                )
+                linha["ordem"].update(
+                    {
+                        "creditos_por_dolar": contas.creditos_por_dolar,
+                        "geracoes_por_dolar": contas.geracoes_por_dolar,
+                        "geracoes_mensais": contas.geracoes_mensais,
                     }
                 )
             except (EntradaInvalidaCalculo, ArithmeticError, ValueError):
