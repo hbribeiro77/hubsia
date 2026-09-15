@@ -1,1 +1,36 @@
-body { font-family: sans-serif; margin: 0; }
+* { box-sizing: border-box; }
+body {
+  font-family: system-ui, sans-serif;
+  margin: 0;
+  color: #111;
+  line-height: 1.4;
+}
+.topo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #ddd;
+}
+main { padding: 1rem; max-width: 960px; margin: 0 auto; }
+form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+input, button {
+  font-size: 1rem;
+  padding: 0.5rem;
+}
+.tabela-scroll { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 720px; }
+th, td { border: 1px solid #ddd; padding: 0.4rem 0.5rem; text-align: left; white-space: nowrap; }
+.erro, .aviso { padding: 0.75rem; border-radius: 4px; }
+.erro { background: #fde8e8; }
+.aviso { background: #e7f3ff; }
+.login main { max-width: 22rem; padding-top: 3rem; }
+@media (max-width: 480px) {
+  main { padding: 0.75rem; }
+  .topo { padding: 0.5rem 0.75rem; }
+}
