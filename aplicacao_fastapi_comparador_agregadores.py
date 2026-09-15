@@ -440,10 +440,10 @@ def criar_app(*, secret: str, db_path: str, https: bool = False) -> FastAPI:
         )
 
     @app.post("/servicos/{servico_id}/excluir")
-    async def post_excluir_servico(servico_id: int):
+    async def post_excluir_servico(request: Request, servico_id: int):
         servico = banco.obter_servico(servico_id)
         if servico is None:
-            return RedirectResponse(url="/", status_code=302)
+            return _pagina_404(request)
         comparacao_id = servico.comparacao_id
         banco.excluir_servico(servico_id)
         return RedirectResponse(url=f"/comparacoes/{comparacao_id}", status_code=302)
