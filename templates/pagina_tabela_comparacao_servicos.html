@@ -1,22 +1,35 @@
 {% extends "pagina_base_hubsia.html" %}
 {% block titulo %}{{ comparacao.nome }} — Hubsia{% endblock %}
 {% block conteudo %}
-<h1>{{ comparacao.nome }}</h1>
-<p>Comparando: {{ comparacao.referencia }}</p>
-{% if erro_meta %}<p class="erro">{{ erro_meta }}</p>{% endif %}
-<form method="post" action="/comparacoes/{{ comparacao.id }}">
-  <label>Nome
-    <input type="text" name="nome" required maxlength="80" value="{{ comparacao.nome }}">
-  </label>
-  <label>Referência
-    <input type="text" name="referencia" required maxlength="200" value="{{ comparacao.referencia }}">
-  </label>
-  <button type="submit">Salvar referência</button>
-</form>
+<div class="titulo-pagina">
+  <h1>{{ comparacao.nome }}</h1>
+  <button type="button" class="botao-icone" id="abrir-modal-referencia" aria-label="Editar nome e referência" title="Editar nome e referência">
+    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+  </button>
+</div>
+<p class="subtitulo">Comparando: {{ comparacao.referencia }}</p>
 
-<h2>{% if servico_edicao %}Editar serviço{% else %}Novo serviço{% endif %}</h2>
-{% if erro_servico %}<p class="erro">{{ erro_servico }}</p>{% endif %}
-<form method="post" action="{% if servico_edicao %}/servicos/{{ servico_edicao.id }}{% else %}/comparacoes/{{ comparacao.id }}/servicos{% endif %}">
+<dialog id="modal-referencia"{% if erro_meta %} data-abrir="1"{% endif %}>
+  <h2>Editar comparação</h2>
+  {% if erro_meta %}<p class="erro">{{ erro_meta }}</p>{% endif %}
+  <form method="post" action="/comparacoes/{{ comparacao.id }}">
+    <label>Nome
+      <input type="text" name="nome" required maxlength="80" value="{{ comparacao.nome }}">
+    </label>
+    <label>Referência
+      <input type="text" name="referencia" required maxlength="200" value="{{ comparacao.referencia }}">
+    </label>
+    <div class="acoes">
+      <button type="submit">Salvar referência</button>
+      <button type="button" class="botao-fantasma" id="fechar-modal-referencia">Cancelar</button>
+    </div>
+  </form>
+</dialog>
+
+<details class="cartao secao-colapsavel"{% if servico_edicao or erro_servico %} open{% endif %}>
+  <summary>{% if servico_edicao %}Editar serviço{% else %}Novo serviço{% endif %}</summary>
+  {% if erro_servico %}<p class="erro">{{ erro_servico }}</p>{% endif %}
+  <form method="post" action="{% if servico_edicao %}/servicos/{{ servico_edicao.id }}{% else %}/comparacoes/{{ comparacao.id }}/servicos{% endif %}">
   <label>Serviço
     <input type="text" name="nome" required maxlength="80" value="{{ servico_edicao.nome if servico_edicao else '' }}">
   </label>
@@ -33,19 +46,20 @@
   {% if servico_edicao %}
   <a href="/comparacoes/{{ comparacao.id }}">Cancelar</a>
   {% endif %}
-</form>
+  </form>
+</details>
 
 <div class="tabela-scroll">
 <table>
   <thead>
     <tr>
-      <th>Serviço</th>
-      <th>Custo mensal (USD)</th>
-      <th>Total de créditos no mês</th>
-      <th>Créditos por dólar</th>
-      <th>Custo usado como referência</th>
-      <th>Gerações por dólar</th>
-      <th>Gerações mensais no plano</th>
+      <th title="Serviço">Serviço</th>
+      <th title="Custo mensal do plano em dólar">US$/mês</th>
+      <th title="Total de créditos no mês">Créditos</th>
+      <th title="Créditos por dólar">Cr/US$</th>
+      <th title="Créditos da geração de referência">Custo ref.</th>
+      <th title="Gerações da referência por dólar">Gerações/US$</th>
+      <th title="Gerações mensais no plano contratado">Gerações/mês</th>
       <th></th>
     </tr>
   </thead>
@@ -62,10 +76,14 @@
       <td>{{ linha.custo_referencia }}</td>
       <td>{{ linha.geracoes_por_dolar }}</td>
       <td>{{ linha.geracoes_mensais }}</td>
-      <td>
-        <a href="/comparacoes/{{ comparacao.id }}?editar_servico={{ linha.servico.id }}">Editar</a>
+      <td class="acoes-linha">
+        <a class="botao-icone" href="/comparacoes/{{ comparacao.id }}?editar_servico={{ linha.servico.id }}" aria-label="Editar" title="Editar">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        </a>
         <form method="post" action="/servicos/{{ linha.servico.id }}/excluir" onsubmit="return confirm('Excluir este serviço?');">
-          <button type="submit">Excluir</button>
+          <button class="botao-icone botao-perigo" type="submit" aria-label="Excluir" title="Excluir">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          </button>
         </form>
       </td>
     </tr>
@@ -74,4 +92,15 @@
   </tbody>
 </table>
 </div>
+<script>
+(function () {
+  var modal = document.getElementById("modal-referencia");
+  var abrir = document.getElementById("abrir-modal-referencia");
+  var fechar = document.getElementById("fechar-modal-referencia");
+  if (!modal || !abrir) return;
+  abrir.addEventListener("click", function () { modal.showModal(); });
+  if (fechar) fechar.addEventListener("click", function () { modal.close(); });
+  if (modal.getAttribute("data-abrir") === "1") modal.showModal();
+})();
+</script>
 {% endblock %}

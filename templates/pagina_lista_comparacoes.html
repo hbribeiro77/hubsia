@@ -2,18 +2,20 @@
 {% block titulo %}Comparações — Hubsia{% endblock %}
 {% block conteudo %}
 <h1>Comparações</h1>
-<p><a href="/comparacoes/nova">Nova comparação</a></p>
+<p class="acoes"><a class="botao" href="/comparacoes/nova">Nova comparação</a></p>
 {% if not comparacoes %}
 <p>Nenhuma comparação ainda.</p>
 <p><a href="/comparacoes/nova">Criar a primeira</a></p>
 {% else %}
-<ul>
+<ul class="lista-comparacoes">
   {% for item in comparacoes %}
   <li>
-    <a href="/comparacoes/{{ item.id }}">{{ item.nome }}</a>
-    <span>{{ item.referencia }}</span>
+    <div>
+      <a class="nome" href="/comparacoes/{{ item.id }}">{{ item.nome }}</a>
+      <div class="referencia">{{ item.referencia }}</div>
+    </div>
     <form method="post" action="/comparacoes/{{ item.id }}/excluir" onsubmit="return confirm('Excluir esta comparação e todos os serviços?');">
-      <button type="submit">Excluir</button>
+      <button class="botao-perigo" type="submit">Excluir</button>
     </form>
   </li>
   {% endfor %}

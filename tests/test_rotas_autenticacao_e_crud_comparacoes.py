@@ -5,6 +5,18 @@ from banco_sqlite_comparacoes_e_servicos import Servico
 from tests.conftest import SECRET_TESTE
 
 
+def test_css_estatico_e_servido_sem_login(client):
+    resposta = client.get("/static/estilos_comparador_agregadores.css")
+    assert resposta.status_code == 200
+    assert "text/css" in resposta.headers["content-type"]
+    assert "--marca" in resposta.text
+    assert "nth-child(even)" in resposta.text
+    assert "1760px" in resposta.text
+    assert ".botao-icone" in resposta.text
+    assert "#f3eee6" in resposta.text
+    assert "#d7efe8" in resposta.text
+
+
 def test_raiz_sem_sessao_redireciona_login(client):
     resposta = client.get("/", follow_redirects=False)
     assert resposta.status_code == 302
@@ -88,6 +100,14 @@ def test_criar_comparacao_e_abrir_tabela_vazia(client_autenticado):
     assert "Wan 3 480p" in pagina.text
     assert "Comparando: Wan 3, 10s, 480p" in pagina.text
     assert "Nenhum serviço ainda." in pagina.text
+    assert "Novo serviço" in pagina.text
+    assert 'class="cartao secao-colapsavel"' in pagina.text
+    assert 'secao-colapsavel" open' not in pagina.text
+    assert 'secao-colapsavel open' not in pagina.text
+    assert 'id="modal-referencia"' in pagina.text
+    assert 'aria-label="Editar nome e referência"' in pagina.text
+    assert 'title="Custo mensal do plano em dólar"' in pagina.text
+    assert "US$/mês" in pagina.text
 
 
 def test_criar_comparacao_nome_vazio_nao_grava(client_autenticado):
@@ -209,6 +229,8 @@ def test_servico_higgsfield_mostra_contas_na_tabela(client_autenticado):
     assert ">40<" in pagina.text or ">40</td>" in pagina.text
     assert ">120<" in pagina.text or ">120</td>" in pagina.text
     assert ">4<" in pagina.text or ">4</td>" in pagina.text
+    assert 'aria-label="Editar"' in pagina.text
+    assert 'aria-label="Excluir"' in pagina.text
 
 
 def test_servico_custo_zero_nao_grava(client_autenticado):
@@ -358,6 +380,8 @@ def test_editar_e_excluir_servico(client_autenticado):
         f"/comparacoes/{comparacao_id}?editar_servico={servico_id}"
     )
     assert 'value="Higgsfield"' in edicao.text
+    assert "Editar serviço" in edicao.text
+    assert 'secao-colapsavel" open' in edicao.text
     client_autenticado.post(
         f"/servicos/{servico_id}",
         data={
