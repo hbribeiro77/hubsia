@@ -99,7 +99,7 @@ def ler_e_consumir_flash(
 def criar_app(*, secret: str, db_path: str, https: bool = False) -> FastAPI:
     banco = BancoComparacoes(db_path)
     banco.inicializar()
-    app = FastAPI()
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
     static_dir = BASE_DIR / "static"
     static_dir.mkdir(exist_ok=True)
@@ -123,7 +123,7 @@ def criar_app(*, secret: str, db_path: str, https: bool = False) -> FastAPI:
 
     class ExigirSessao(BaseHTTPMiddleware):
         async def dispatch(self, request: Request, call_next):
-            if request.url.path.startswith("/static"):
+            if request.url.path == "/static" or request.url.path.startswith("/static/"):
                 return await call_next(request)
             if request.url.path == "/login":
                 return await call_next(request)
